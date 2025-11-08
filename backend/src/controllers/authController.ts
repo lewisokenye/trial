@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
+import Farmer from '../models/Farmer';
+import NGO from '../models/NGO';
 
 interface AuthRequest extends Request {
   user?: any;
@@ -19,7 +21,14 @@ export const register = async (req: Request, res: Response) => {
         if (!errors.isEmpty()) {
             return res.status(400).json({ errors: errors.array() });
         }
-        const { name, email, password, role, organization, location } = req.body;
+        const { 
+            name, email, password, role, organization, location, phoneNumber,
+            // Farmer-specific fields
+            farmName, farmSize, primaryCrops, farmingExperience, farmingType,
+            // NGO-specific fields
+            organizationName, registrationNumber, organizationType, focusAreas, 
+            yearEstablished, serviceRegions, website
+        } = req.body;
 
         const userExists = await User.findOne({ email });
         if (userExists) {
@@ -33,7 +42,47 @@ export const register = async (req: Request, res: Response) => {
             role : role || 'user',
             organization,
             location,
+            phoneNumber
         }) as any;
+
+        // If user is registering as farmer, create Farmer profile
+        if (role === 'farmer' && farmName && farmSize) {
+            const farmerID = `FRM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            
+            await Farmer.create({
+                user: user._id,
+                farmName,
+                farmSize: parseFloat(farmSize),
+                location: location || '',
+                primaryCrops: primaryCrops ? primaryCrops.split(',').map((crop: string) => crop.trim()) : [],
+                farmingExperience: farmingExperience || '0-2',
+                farmingType: farmingType || 'conventional',
+                farmerID,
+                isVerified: false
+            });
+        }
+
+        // If user is registering as NGO, create NGO profile
+        if (role === 'ngo' && organizationName && registrationNumber) {
+            const ngoID = `NGO-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            
+            await NGO.create({
+                user: user._id,
+                organizationName,
+                registrationNumber,
+                organizationType: organizationType || 'non-profit',
+                focusAreas: focusAreas ? focusAreas.split(',').map((area: string) => area.trim()) : [],
+                yearEstablished: parseInt(yearEstablished) || new Date().getFullYear(),
+                location: location || '',
+                serviceRegions: serviceRegions ? serviceRegions.split(',').map((region: string) => region.trim()) : [],
+                website: website || '',
+                contactPerson: name,
+                contactEmail: email,
+                contactPhone: phoneNumber || '',
+                ngoID,
+                isVerified: false
+            });
+        }
         
         res.status(201).json({
             success: true,
@@ -45,11 +94,13 @@ export const register = async (req: Request, res: Response) => {
                     role: user.role,
                     organization: user.organization,
                     location: user.location,
+                    phoneNumber: user.phoneNumber,
                 },
                 token: generateToken(user._id.toString()),
             },
         });
     } catch (error) {
+        console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error', error });
     }
 };
