@@ -78,26 +78,37 @@ Provide ONLY the JSON response, no additional text.`;
     console.log('🤖 Generating AI meal plan for user:', req.user.id);
     console.log('📝 User data:', { age, weight, height, activityLevel, dietaryPreference });
 
-    // Call Google Gemini API
+    // Call Google Gemini API with fallback
     let aiResponse;
-    try {
-      console.log('🔄 Calling Google Gemini API...');
-      // Try gemini-1.5-flash-latest first, fallback to gemini-pro if needed
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
-      
-      const fullPrompt = `You are a professional nutritionist who creates personalized meal plans. Always respond with valid JSON only.\n\n${prompt}`;
-      
-      const result = await model.generateContent(fullPrompt);
-      const response = await result.response;
-      aiResponse = response.text();
-      
-      console.log('✅ Gemini API call successful');
-    } catch (geminiError: any) {
-      console.error('❌ Gemini API Error:', {
-        message: geminiError.message,
-        stack: geminiError.stack
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-pro'];
+    let lastError;
+    
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`🔄 Trying Gemini model: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        const fullPrompt = `You are a professional nutritionist who creates personalized meal plans. Always respond with valid JSON only.\n\n${prompt}`;
+        
+        const result = await model.generateContent(fullPrompt);
+        const response = await result.response;
+        aiResponse = response.text();
+        
+        console.log(`✅ Gemini API call successful with model: ${modelName}`);
+        break; // Success, exit loop
+      } catch (geminiError: any) {
+        console.error(`❌ Failed with ${modelName}:`, geminiError.message);
+        lastError = geminiError;
+        // Continue to next model
+      }
+    }
+    
+    if (!aiResponse && lastError) {
+      console.error('❌ All Gemini models failed:', {
+        message: lastError.message,
+        stack: lastError.stack
       });
-      throw geminiError;
+      throw lastError;
     }
 
     if (!aiResponse) {
