@@ -15,7 +15,7 @@ const getWasteEntries = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const startIndex = (page - 1) * limit;
-        let query = { user: req.user.id };
+        let query = { user: req.user._id };
         // Filter by date range if specified
         if (req.query.startDate && req.query.endDate) {
             query.date = {
@@ -79,7 +79,7 @@ const getWasteEntry = async (req, res) => {
             });
         }
         // Check if user owns the waste entry
-        if (wasteEntry.user.toString() !== req.user.id) {
+        if (wasteEntry.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to access this waste entry'
@@ -113,7 +113,7 @@ const createWasteEntry = async (req, res) => {
             });
         }
         // Add user to req.body
-        req.body.user = req.user.id;
+        req.body.user = req.user._id;
         const wasteEntry = await WasteEntry_1.default.create(req.body);
         res.status(201).json({
             success: true,
@@ -142,7 +142,7 @@ const updateWasteEntry = async (req, res) => {
             });
         }
         // Check if user owns the waste entry
-        if (wasteEntry.user.toString() !== req.user.id) {
+        if (wasteEntry.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to update this waste entry'
@@ -179,7 +179,7 @@ const deleteWasteEntry = async (req, res) => {
             });
         }
         // Check if user owns the waste entry
-        if (wasteEntry.user.toString() !== req.user.id) {
+        if (wasteEntry.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this waste entry'
@@ -205,7 +205,7 @@ exports.deleteWasteEntry = deleteWasteEntry;
 // @access  Private
 const getWasteAnalytics = async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user._id;
         const period = req.query.period || 'month';
         // Calculate date range
         const now = new Date();
@@ -277,25 +277,65 @@ const getWasteAnalytics = async (req, res) => {
     }
 };
 exports.getWasteAnalytics = getWasteAnalytics;
+// Helper function to calculate expiry status
+const calculateExpiryStatus = (expiryDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+    const diffTime = expiry.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) {
+        return 'expired';
+    }
+    else if (diffDays <= 3) {
+        return 'expiring-soon';
+    }
+    else {
+        return 'fresh';
+    }
+};
 // @desc    Get all expiry items for user
 // @route   GET /api/waste/expiry
 // @access  Private
 const getExpiryItems = async (req, res) => {
     try {
-        console.log('Fetching expiry items for user:', req.user.id);
-        const expiryItems = await ExpiryItem_1.default.find({ user: req.user.id })
-            .sort({ expiryDate: 1 });
-        console.log(`Found ${expiryItems.length} expiry items`);
+        console.log('========================================');
+        console.log('GET /api/waste/expiry called');
+        console.log('User:', req.user);
+        console.log('User _id:', req.user?._id);
+        console.log('========================================');
+        if (!req.user || !req.user._id) {
+            console.error('❌ No user found in request');
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated'
+            });
+        }
+        const expiryItems = await ExpiryItem_1.default.find({ user: req.user._id })
+            .sort({ expiryDate: 1 })
+            .lean(); // Use lean() for better performance
+        console.log(`✅ Found ${expiryItems.length} raw items from database`);
+        // Calculate current status for all items (without saving)
+        const itemsWithStatus = expiryItems.map((item) => {
+            const currentStatus = calculateExpiryStatus(item.expiryDate);
+            return {
+                ...item,
+                status: currentStatus
+            };
+        });
+        console.log(`✅ Returning ${itemsWithStatus.length} items with calculated status`);
         res.json({
             success: true,
-            count: expiryItems.length,
-            data: expiryItems
+            count: itemsWithStatus.length,
+            data: itemsWithStatus
         });
     }
     catch (error) {
-        console.error('Get expiry items error:', error);
+        console.error('❌❌❌ Get expiry items error:', error);
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
+        console.error('Error name:', error.name);
         res.status(500).json({
             success: false,
             message: error.message || 'Server error'
@@ -317,15 +357,24 @@ const createExpiryItem = async (req, res) => {
             });
         }
         // Add user to req.body
-        req.body.user = req.user.id;
+        req.body.user = req.user._id;
+        // Calculate initial status based on expiry date
+        if (req.body.expiryDate) {
+            req.body.status = calculateExpiryStatus(req.body.expiryDate);
+        }
         const expiryItem = await ExpiryItem_1.default.create(req.body);
+        console.log('✅ Expiry item created:', {
+            itemName: expiryItem.itemName,
+            expiryDate: expiryItem.expiryDate,
+            status: expiryItem.status
+        });
         res.status(201).json({
             success: true,
             data: expiryItem
         });
     }
     catch (error) {
-        console.error(error);
+        console.error('❌ Create expiry item error:', error);
         res.status(500).json({
             success: false,
             message: 'Server error'
@@ -346,7 +395,7 @@ const updateExpiryItem = async (req, res) => {
             });
         }
         // Check if user owns the expiry item
-        if (expiryItem.user.toString() !== req.user.id) {
+        if (expiryItem.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to update this expiry item'
@@ -383,7 +432,7 @@ const deleteExpiryItem = async (req, res) => {
             });
         }
         // Check if user owns the expiry item
-        if (expiryItem.user.toString() !== req.user.id) {
+        if (expiryItem.user.toString() !== req.user._id.toString()) {
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this expiry item'
@@ -415,12 +464,11 @@ exports.createWasteEntryValidation = [
     (0, express_validator_1.body)('location').trim().isLength({ min: 1 }).withMessage('Location is required')
 ];
 exports.createExpiryItemValidation = [
-    (0, express_validator_1.body)('name').trim().isLength({ min: 1 }).withMessage('Name is required'),
+    (0, express_validator_1.body)('itemName').trim().isLength({ min: 1 }).withMessage('Item name is required'),
     (0, express_validator_1.body)('category').isIn(['Fruits', 'Vegetables', 'Dairy', 'Meat', 'Bakery', 'Pantry Items', 'Frozen', 'Beverages']).withMessage('Invalid category'),
     (0, express_validator_1.body)('purchaseDate').isLength({ min: 1 }).withMessage('Purchase date is required'),
     (0, express_validator_1.body)('expiryDate').isLength({ min: 1 }).withMessage('Expiry date is required'),
-    (0, express_validator_1.body)('quantity').isNumeric().withMessage('Quantity must be a number'),
-    (0, express_validator_1.body)('unit').isIn(['pieces', 'lbs', 'kg', 'gallons', 'liters', 'packages', 'cans', 'bottles']).withMessage('Invalid unit'),
+    (0, express_validator_1.body)('quantity').trim().isLength({ min: 1 }).withMessage('Quantity is required'),
     (0, express_validator_1.body)('location').isIn(['Refrigerator', 'Freezer', 'Pantry', 'Counter', 'Cupboard']).withMessage('Invalid location')
 ];
 //# sourceMappingURL=wasteController.js.map

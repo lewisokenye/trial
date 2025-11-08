@@ -16,6 +16,7 @@ const nutrition_1 = __importDefault(require("./routes/nutrition"));
 const supplyChain_1 = __importDefault(require("./routes/supplyChain"));
 const waste_1 = __importDefault(require("./routes/waste"));
 const disease_1 = __importDefault(require("./routes/disease"));
+const auth_2 = require("./middleware/auth");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -23,7 +24,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: process.env.CLIENT_URL || 'http://localhost:5177',
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
     credentials: true
 }));
 app.use(express_1.default.json({ limit: '10mb' }));
@@ -40,6 +41,18 @@ app.use('/api/disease', disease_1.default);
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Usana API is running' });
+});
+// Test auth endpoint
+app.get('/api/test-auth', auth_2.protect, (req, res) => {
+    res.json({
+        status: 'OK',
+        message: 'Auth working',
+        user: {
+            _id: req.user?._id,
+            name: req.user?.name,
+            email: req.user?.email
+        }
+    });
 });
 // Error handling middleware
 app.use((err, req, res, next) => {

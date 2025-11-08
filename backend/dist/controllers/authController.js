@@ -7,6 +7,8 @@ exports.loginValidation = exports.registerValidation = exports.updatePassword = 
 const express_validator_1 = require("express-validator");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = __importDefault(require("../models/User"));
+const Farmer_1 = __importDefault(require("../models/Farmer"));
+const NGO_1 = __importDefault(require("../models/NGO"));
 const generateToken = (userId) => {
     return jsonwebtoken_1.default.sign({ id: userId }, process.env.JWT_SECRET || 'fallback_secret', {
         expiresIn: '30d',
@@ -18,7 +20,11 @@ const register = async (req, res) => {
         if (!errors.isEmpty()) {
             return res.status(400).json({ errors: errors.array() });
         }
-        const { name, email, password, role, organization, location } = req.body;
+        const { name, email, password, role, organization, location, phoneNumber, 
+        // Farmer-specific fields
+        farmName, farmSize, primaryCrops, farmingExperience, farmingType, 
+        // NGO-specific fields
+        organizationName, registrationNumber, organizationType, focusAreas, yearEstablished, serviceRegions, website } = req.body;
         const userExists = await User_1.default.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: 'User already exists' });
@@ -30,7 +36,43 @@ const register = async (req, res) => {
             role: role || 'user',
             organization,
             location,
+            phoneNumber
         });
+        // If user is registering as farmer, create Farmer profile
+        if (role === 'farmer' && farmName && farmSize) {
+            const farmerID = `FRM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            await Farmer_1.default.create({
+                user: user._id,
+                farmName,
+                farmSize: parseFloat(farmSize),
+                location: location || '',
+                primaryCrops: primaryCrops ? primaryCrops.split(',').map((crop) => crop.trim()) : [],
+                farmingExperience: farmingExperience || '0-2',
+                farmingType: farmingType || 'conventional',
+                farmerID,
+                isVerified: false
+            });
+        }
+        // If user is registering as NGO, create NGO profile
+        if (role === 'ngo' && organizationName && registrationNumber) {
+            const ngoID = `NGO-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            await NGO_1.default.create({
+                user: user._id,
+                organizationName,
+                registrationNumber,
+                organizationType: organizationType || 'non-profit',
+                focusAreas: focusAreas ? focusAreas.split(',').map((area) => area.trim()) : [],
+                yearEstablished: parseInt(yearEstablished) || new Date().getFullYear(),
+                location: location || '',
+                serviceRegions: serviceRegions ? serviceRegions.split(',').map((region) => region.trim()) : [],
+                website: website || '',
+                contactPerson: name,
+                contactEmail: email,
+                contactPhone: phoneNumber || '',
+                ngoID,
+                isVerified: false
+            });
+        }
         res.status(201).json({
             success: true,
             data: {
@@ -41,12 +83,14 @@ const register = async (req, res) => {
                     role: user.role,
                     organization: user.organization,
                     location: user.location,
+                    phoneNumber: user.phoneNumber,
                 },
                 token: generateToken(user._id.toString()),
             },
         });
     }
     catch (error) {
+        console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error', error });
     }
 };

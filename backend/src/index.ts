@@ -11,6 +11,7 @@ import nutritionRoutes from './routes/nutrition';
 import supplyChainRoutes from './routes/supplyChain';
 import wasteRoutes from './routes/waste';
 import diseaseRoutes from './routes/disease';
+import { protect } from './middleware/auth';
 
 dotenv.config();
 
@@ -43,10 +44,32 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Usana API is running' });
 });
 
+// Test auth endpoint
+app.get('/api/test-auth', protect, (req: any, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Auth working', 
+    user: {
+      _id: req.user?._id,
+      name: req.user?.name,
+      email: req.user?.email
+    }
+  });
+});
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  console.error('❌❌❌ Global Error Handler:');
+  console.error('Error:', err);
+  console.error('Message:', err.message);
+  console.error('Stack:', err.stack);
+  console.error('Request URL:', req.url);
+  console.error('Request Method:', req.method);
+  res.status(err.status || 500).json({ 
+    success: false,
+    message: err.message || 'Something went wrong!',
+    error: process.env.NODE_ENV === 'development' ? err : {}
+  });
 });
 
 app.listen(PORT, () => {

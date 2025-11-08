@@ -48,12 +48,28 @@ const DonationSchema = new mongoose_1.Schema({
     // Food donation fields
     foodType: {
         type: String,
-        enum: ['prepared-food', 'fresh-produce', 'baked-goods', 'dairy', 'meat', 'pantry-items', 'frozen', 'beverages', 'other']
+        enum: {
+            values: ['prepared-food', 'fresh-produce', 'baked-goods', 'dairy', 'meat', 'pantry-items', 'frozen', 'beverages', 'other'],
+            message: '{VALUE} is not a valid food type'
+        },
+        validate: {
+            validator: function (v) {
+                // Only validate if donation type is food and value is provided
+                if (this.type === 'food') {
+                    return v && v.length > 0;
+                }
+                return true; // Skip validation for money donations
+            },
+            message: 'Food type is required for food donations'
+        }
     },
     quantity: String,
     unit: {
         type: String,
-        enum: ['lbs', 'kg', 'pieces', 'servings', 'gallons', 'liters', 'packages', 'cans', 'bottles']
+        enum: {
+            values: ['lbs', 'kg', 'pieces', 'servings', 'gallons', 'liters', 'packages', 'cans', 'bottles'],
+            message: '{VALUE} is not a valid unit'
+        }
     },
     expiryDate: Date,
     pickupLocation: String,

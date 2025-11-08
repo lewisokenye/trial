@@ -93,6 +93,20 @@ const createDonation = async (req, res) => {
         }
         // Add user to req.body
         req.body.donor = req.user.id;
+        // Clean up empty fields for money donations
+        if (req.body.type === 'money') {
+            delete req.body.foodType;
+            delete req.body.quantity;
+            delete req.body.unit;
+            delete req.body.expiryDate;
+            delete req.body.pickupLocation;
+        }
+        // Clean up empty fields for food donations
+        if (req.body.type === 'food') {
+            delete req.body.amount;
+            delete req.body.paymentMethod;
+            delete req.body.transactionId;
+        }
         console.log('Creating donation with data:', JSON.stringify(req.body, null, 2));
         const donation = await Donation_1.default.create(req.body);
         res.status(201).json({
